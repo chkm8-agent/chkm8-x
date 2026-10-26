@@ -1,0 +1,318 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>html,body{margin:0;background:#000}canvas{display:block}</style></head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// Hooded crowned skull (E4 scene) with a parameterised skull:
+//   teeth = fang | worn | broken | clenched
+//   shade = hatch | stipple | dark      (dark = chiaroscuro: half the face lost in shadow)
+//   turn  = -0.4..0.4  (3/4 profile; +  = face turned to the viewer's left)
+//   tilt  = degrees    (head tilt)
+//   layer=eye -> transparent overlay with only the red optic
+const S = 400, C = S / 2, Z = 1.2;
+const cv = document.getElementById('c');
+const dpr = window.devicePixelRatio || 1;
+cv.width = S * dpr; cv.height = S * dpr; cv.style.width = S + 'px'; cv.style.height = S + 'px';
+const g = cv.getContext('2d'); g.scale(dpr, dpr);
+const LT = '#fff', DK = '#000';
+const Q = new URLSearchParams(location.search);
+const TEETH = Q.get('teeth') || 'fang', SHADE = Q.get('shade') || 'hatch';
+const T = parseFloat(Q.get('turn') || '0'), TILT = parseFloat(Q.get('tilt') || '0') * Math.PI / 180;
+const LAYER = Q.get('layer');
+let seed = 21; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+g.lineJoin = 'round'; g.lineCap = 'round';
+g.fillStyle = DK; g.fillRect(0, 0, S, S);
+g.translate(C, C + 18 * (Z - 1) * 2); g.scale(Z, Z); g.translate(-C, -C);
+const blur = (px) => { g.filter = px ? `blur(${px * Z * dpr}px)` : 'none'; };
+
+function star(x, y, r, pts = 4, inner = 0.26) {
+  g.beginPath();
+  for (let i = 0; i < pts * 2; i++) { const a = -Math.PI / 2 + i * Math.PI / pts, rr = i % 2 ? r * inner : r; g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
+  g.closePath(); g.fill();
+}
+function hatchClip(sp, ang, alpha, col = '0,0,0', lw = 0.7) {
+  g.save(); g.clip();
+  g.strokeStyle = `rgba(${col},${alpha})`; g.lineWidth = lw;
+  const c = Math.cos(ang), s = Math.sin(ang);
+  for (let t = -500; t < 500; t += sp) { g.beginPath(); g.moveTo(-c * 500 - s * t, -s * 500 + c * t); g.lineTo(c * 500 - s * t, s * 500 + c * t); g.stroke(); }
+  g.restore();
+}
+
+// ---------------- background: stars, halo ----------------
+g.fillStyle = LT;
+for (let i = 0; i < 110; i++) {
+  const x = rnd() * S, y = rnd() * S;
+  if (Math.hypot(x - C, y - (C + 6)) < 165) continue;
+  if (rnd() < 0.6) { g.beginPath(); g.arc(x, y, 0.5 + rnd() * 1.1, 0, 7); g.fill(); } else star(x, y, 2.5 + rnd() * 4.5);
+}
+const HY = C + 6;
+g.strokeStyle = LT; g.lineWidth = 0.75;
+for (let i = 0; i < 140; i++) { const a = i / 140 * Math.PI * 2, L = 150 + (i % 3) * 14 + rnd() * 8; g.beginPath(); g.moveTo(C + Math.cos(a) * 118, HY + Math.sin(a) * 118); g.lineTo(C + Math.cos(a) * L, HY + Math.sin(a) * L); g.stroke(); }
+g.fillStyle = LT;
+for (let i = 0; i < 12; i++) {
+  const a = i / 12 * Math.PI * 2 + Math.PI / 12, L = i % 2 ? 168 : 190, d = 0.06;
+  g.beginPath(); g.moveTo(C + Math.cos(a - d) * 118, HY + Math.sin(a - d) * 118); g.lineTo(C + Math.cos(a) * L, HY + Math.sin(a) * L); g.lineTo(C + Math.cos(a + d) * 118, HY + Math.sin(a + d) * 118); g.closePath(); g.fill();
+}
+g.strokeStyle = LT;
+[[118, 1.6], [112, 0.8], [106, 0.6]].forEach(([r, w]) => { g.lineWidth = w; g.beginPath(); g.arc(C, HY, r, 0, 7); g.stroke(); });
+
+// ---------------- hood (E4 engraved) ----------------
+(() => {
+  const hx = C, hy = C + 30;
+  const outer = () => {
+    g.beginPath(); g.moveTo(hx - 175, S + 40);
+    g.bezierCurveTo(hx - 150, hy + 110, hx - 118, hy + 70, hx - 104, hy - 10);
+    g.bezierCurveTo(hx - 96, hy - 80, hx - 60, hy - 124, hx, hy - 128);
+    g.bezierCurveTo(hx + 60, hy - 124, hx + 96, hy - 80, hx + 104, hy - 10);
+    g.bezierCurveTo(hx + 118, hy + 70, hx + 150, hy + 110, hx + 175, S + 40); g.closePath();
+  };
+  const inner = () => {
+    g.beginPath(); g.moveTo(hx - 58, S + 60);
+    g.bezierCurveTo(hx - 82, hy + 70, hx - 90, hy + 10, hx - 84, hy - 40);
+    g.bezierCurveTo(hx - 76, hy - 92, hx - 40, hy - 106, hx, hy - 108);
+    g.bezierCurveTo(hx + 40, hy - 106, hx + 76, hy - 92, hx + 84, hy - 40);
+    g.bezierCurveTo(hx + 90, hy + 10, hx + 82, hy + 70, hx + 58, S + 60); g.closePath();
+  };
+  outer(); g.fillStyle = DK; g.fill();
+  g.save(); outer(); g.clip();
+  g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = 0.8;
+  for (let k = 1; k <= 7; k++) {
+    const f = 1 - k * 0.045;
+    g.beginPath(); g.moveTo(hx - 175 * f, S + 40);
+    g.bezierCurveTo(hx - 150 * f, hy + 110, hx - 118 * f, hy + 70, hx - 104 * f, hy - 10);
+    g.bezierCurveTo(hx - 96 * f, hy - 80 * f, hx - 60 * f, hy - 124 * f, hx, hy - 128 * f + k * 0.6);
+    g.bezierCurveTo(hx + 60 * f, hy - 124 * f, hx + 96 * f, hy - 80 * f, hx + 104 * f, hy - 10);
+    g.bezierCurveTo(hx + 118 * f, hy + 70, hx + 150 * f, hy + 110, hx + 175 * f, S + 40); g.stroke();
+  }
+  g.lineWidth = 1;
+  [-1, 1].forEach(d => { for (let k = 0; k < 6; k++) { const x0 = hx + d * (92 + k * 11); g.beginPath(); g.moveTo(x0, hy + 30 + k * 6); g.bezierCurveTo(x0 + d * 6, hy + 90, x0 + d * 14, hy + 130, x0 + d * 26, S + 20); g.stroke(); } });
+  g.restore();
+  outer(); g.strokeStyle = LT; g.lineWidth = 2; g.stroke();
+  inner(); g.fillStyle = DK; g.fill();
+  g.save(); inner(); g.clip();
+  g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 0.7;
+  for (let t = -300; t < 300; t += 3) { g.beginPath(); g.moveTo(hx - 150, hy + t - 150); g.lineTo(hx + 150, hy + t + 150); g.stroke(); }
+  g.restore();
+  inner(); g.strokeStyle = LT; g.lineWidth = 1.4; g.stroke();
+  // spine + clavicles in the hood's shadow
+  g.strokeStyle = 'rgba(255,255,255,0.75)'; g.lineWidth = 1.4;
+  for (let k = 0; k < 3; k++) { g.beginPath(); g.roundRect(hx - 7 - T * 20, hy + 98 + k * 11, 14, 8, 2); g.stroke(); }
+  [-1, 1].forEach(d => { g.beginPath(); g.moveTo(hx + d * 10, hy + 124); g.bezierCurveTo(hx + d * 28, hy + 116, hx + d * 44, hy + 122, hx + d * 60, hy + 116); g.stroke(); });
+})();
+
+// ---------------- skull with 3/4 turn mapping ----------------
+// Local coords: origin at the skull centre. Points flagged as "face" shift toward the turned side,
+// then x is compressed on the far side and widened on the near side.
+const FS = -T * 22;                 // feature shift toward the turned side
+// far side compresses hard; near-side cranium (back of the skull) swells, near-side face only a little
+const comp = (x, face) => x * (T >= 0 ? (x < 0 ? 1 - T * 1.15 : 1 + T * (face ? 0.12 : 0.38)) : (x > 0 ? 1 + T * 1.15 : 1 - T * (face ? 0.12 : 0.38)));
+const kx = (x) => Math.abs(comp(x || 0.001, true) / (x || 0.001));
+const P = (x, y, face = false) => [comp(face ? x + FS : x, face), y];
+const mv = (x, y, f) => g.moveTo(...P(x, y, f));
+const ln = (x, y, f) => g.lineTo(...P(x, y, f));
+const bz = (a, b, c, d, e, h, f) => g.bezierCurveTo(...P(a, b, f), ...P(c, d, f), ...P(e, h, f));
+const qd = (a, b, c, d, f) => g.quadraticCurveTo(...P(a, b, f), ...P(c, d, f));
+let EYE_M = null, EYE_P = null;
+
+const SX = C - T * 6, SY = C + 30;
+g.save();
+g.translate(SX, SY); g.rotate(TILT);
+
+const skullPath = () => {
+  g.beginPath();
+  mv(-62, 8);
+  bz(-74, -40, -50, -84, 0, -86);
+  bz(50, -84, 74 + T * 10, -40, 62 + T * 6, 8);
+  bz(60 + T * 6, 22, 52, 30, 46, 36, true);            // near cheekbone
+  ln(40, 52, true); bz(30, 56, 14, 58, 0, 58, true); bz(-14, 58, -30, 56, -40, 52, true);
+  ln(-46, 36, true); bz(-52, 30, -60, 22, -62, 8, true);
+  g.closePath();
+};
+// cast shadow into the hood
+skullPath(); g.fillStyle = 'rgba(0,0,0,0.9)'; blur(6); g.fill(); blur(0);
+skullPath(); g.fillStyle = LT; g.fill();
+
+// side plane of the cranium on the near side when turned (temporal fossa + zygomatic arch)
+if (Math.abs(T) > 0.05) {
+  const d = 1;
+  g.strokeStyle = DK; g.lineWidth = 1.1;
+  g.beginPath(); mv(44, -50); qd(66, -26, 58, 8); g.stroke();                           // temporal line
+  g.beginPath(); mv(34, 20, true); qd(54, 14, 66, 22); g.stroke();                       // zygomatic arch
+  g.beginPath(); mv(58, 26); qd(64, 34, 60, 46); g.stroke();                             // mastoid hint
+}
+
+// ---- shading styles ----
+const lightX = 20 - T * 30, lightY = -55;
+if (SHADE === 'hatch') {
+  g.beginPath(); mv(-64, 4); bz(-72, -40, -52, -80, -20, -84); bz(-46, -66, -56, -30, -48, 30); g.closePath(); hatchClip(2.6, 1.2, 0.9);
+  g.beginPath(); mv(64, 4); bz(72, -40, 52, -80, 20, -84); bz(46, -66, 56, -30, 48, 30); g.closePath(); hatchClip(3.4, -1.2, 0.55);
+} else if (SHADE === 'stipple') {
+  g.save(); skullPath(); g.clip();
+  g.fillStyle = DK;
+  for (let i = 0; i < 9000; i++) {
+    const x = -80 + rnd() * 160, y = -90 + rnd() * 150;
+    const dist = Math.hypot((x - lightX) / 95, (y - lightY) / 120);
+    const edge = Math.min(1, Math.max(0, dist - 0.25) * 1.4);
+    if (rnd() < edge ** 2.6 * 0.4) { g.beginPath(); g.arc(x, y, 0.3 + rnd() * 0.3, 0, 7); g.fill(); }
+  }
+  // stipple pooling in temples and under cheekbones
+  for (let i = 0; i < 700; i++) {
+    const d = rnd() < 0.5 ? -1 : 1, a = rnd() * 7, r = Math.sqrt(rnd());
+    const [x, y] = rnd() < 0.5 ? [d * 56 + Math.cos(a) * 10 * r, -6 + Math.sin(a) * 20 * r] : [d * 36 + FS + Math.cos(a) * 10 * r, 30 + Math.sin(a) * 12 * r];
+    g.beginPath(); g.arc(...P(x, y), 0.4 + rnd() * 0.4, 0, 7); g.fill();
+  }
+  g.restore();
+} else if (SHADE === 'dark') {
+  g.save(); skullPath(); g.clip();
+  // the far half falls into shadow with a soft terminator; hatching in the transition
+  const sgn = T >= 0 ? -1 : 1;
+  blur(5); g.fillStyle = 'rgba(0,0,0,0.96)';
+  g.beginPath(); mv(sgn * 120, -120); ln(sgn * 30, -120); bz(sgn * 2 + FS, -60, sgn * 30 + FS, -10, sgn * 12 + FS, 30, true); bz(sgn * 2 + FS, 60, sgn * 26 + FS, 90, sgn * 20 + FS, 120, true); ln(sgn * 120, 120); g.closePath(); g.fill();
+  blur(0);
+  g.beginPath(); mv(sgn * 46, -120); bz(sgn * 16 + FS, -60, sgn * 44 + FS, -10, sgn * 26 + FS, 30, true); bz(sgn * 16 + FS, 60, sgn * 40 + FS, 90, sgn * 34 + FS, 120, true); ln(sgn * 20 + FS, 120); bz(sgn * 26 + FS, 90, sgn * 2 + FS, 60, sgn * 12 + FS, 30, true); bz(sgn * 30 + FS, -10, sgn * 2 + FS, -60, sgn * 30, -120); g.closePath();
+  hatchClip(2.4, 1.0, 0.7);
+  // underside of the brow and cheekbones in shadow too
+  blur(4); g.fillStyle = 'rgba(0,0,0,0.6)'; g.beginPath(); g.ellipse(...P(0, 46, true), 44, 12, 0, 0, 7); g.fill(); blur(0);
+  g.restore();
+}
+
+// cracks
+g.strokeStyle = DK; g.lineWidth = 1;
+g.beginPath(); mv(6, -86); ln(2, -76); ln(8, -68); ln(3, -60); g.stroke();
+// forehead sigil (Mercury)
+g.strokeStyle = DK; g.lineWidth = 1.3;
+{ const [mx, my] = P(0, -46, true); g.beginPath(); g.ellipse(mx, my, 5.5 * kx(FS), 5.5, 0, 0, 7); g.stroke(); }
+g.beginPath(); mv(0, -40.5, true); ln(0, -31, true); mv(-4.5, -35, true); ln(4.5, -35, true); g.stroke();
+{ const [mx, my] = P(0, -57, true); g.beginPath(); g.ellipse(mx, my, 5.5 * kx(FS), 5.5, 0, 0.15 * Math.PI, 0.85 * Math.PI); g.stroke(); }
+
+// orbits (E4 angular scowl), mapped
+const orbit = (d) => {
+  const ex = d * 26, ey = -10;
+  g.beginPath();
+  mv(ex - d * 15, ey - 2, true); ln(ex + d * 2, ey - 13, true);
+  qd(ex + d * 14, ey - 18, ex + d * 19, ey - 14, true);
+  qd(ex + d * 18, ey + 4, ex + d * 6, ey + 13, true);
+  qd(ex - d * 6, ey + 16, ex - d * 13, ey + 8, true);
+  g.closePath();
+};
+[-1, 1].forEach(d => {
+  orbit(d); g.fillStyle = DK; g.fill();
+  g.save(); orbit(d); g.clip(); g.strokeStyle = 'rgba(255,255,255,0.28)'; g.lineWidth = 0.6;
+  for (let t = 0; t < 9; t++) { const y = -3 + t * 1.5; g.beginPath(); mv(d * 26 - 22, y, true); ln(d * 26 + 22, y - d * 3, true); g.stroke(); }
+  g.restore();
+  g.strokeStyle = DK; g.lineWidth = 1.2; g.beginPath(); mv(d * 12, -15, true); ln(d * 28, -25, true); qd(d * 38, -29, d * 42, -26, true); g.stroke();
+});
+EYE_M = g.getTransform(); EYE_P = P(T < 0 ? -26 : 26, -8, true);   // optic always in the near (visible) orbit
+
+// nose
+g.fillStyle = DK; g.beginPath(); mv(0, 6, true); bz(-3, 14, -12, 25, -9, 31, true); ln(0, 26, true); ln(9, 31, true); bz(12, 25, 3, 14, 0, 6, true); g.closePath(); g.fill();
+// nasal bone edge visible in 3/4
+if (Math.abs(T) > 0.05) { g.strokeStyle = DK; g.lineWidth = 1; g.beginPath(); mv(4, -16, true); qd(8, -2, 11, 8, true); g.stroke(); }
+
+// ---- mouth ----
+const open = TEETH === 'fang' ? 4 : TEETH === 'broken' ? 3 : 0;
+g.fillStyle = LT; g.beginPath(); mv(-36, 34, true); ln(36, 34, true); ln(34, 52, true); ln(-34, 52, true); g.closePath(); g.fill();
+const jaw = () => { g.beginPath(); mv(-38, 54 + open, true); ln(38, 54 + open, true); bz(40, 72 + open, 32, 88 + open, 14, 92 + open, true); ln(-14, 92 + open, true); bz(-32, 88 + open, -40, 72 + open, -38, 54 + open, true); g.closePath(); };
+jaw(); g.fillStyle = LT; g.fill();
+if (SHADE === 'hatch') {
+  g.beginPath(); mv(-38, 56 + open, true); bz(-40, 72 + open, -32, 88 + open, -14, 92 + open, true); ln(-20, 70 + open, true); g.closePath(); hatchClip(2.8, 1.1, 0.8);
+  g.beginPath(); mv(38, 56 + open, true); bz(40, 72 + open, 32, 88 + open, 14, 92 + open, true); ln(20, 70 + open, true); g.closePath(); hatchClip(3.4, -1.1, 0.5);
+} else if (SHADE === 'stipple') {
+  g.save(); jaw(); g.clip(); g.fillStyle = DK;
+  for (let i = 0; i < 1600; i++) { const x = -40 + rnd() * 80, y = 50 + rnd() * 46; const e = Math.min(1, Math.abs(x) / 40 * 0.8 + (y - 50) / 46 * 0.5); if (rnd() < e ** 2 * 0.5) { g.beginPath(); g.arc(...P(x, y, true), 0.35 + rnd() * 0.4, 0, 7); g.fill(); } }
+  g.restore();
+} else {
+  g.save(); jaw(); g.clip(); blur(4); g.fillStyle = 'rgba(0,0,0,0.75)'; const sg = T >= 0 ? -1 : 1;
+  g.beginPath(); mv(sg * 60, 40, true); ln(sg * 2, 40, true); ln(sg * 8, 110, true); ln(sg * 60, 110, true); g.closePath(); g.fill();
+  g.beginPath(); g.ellipse(...P(0, 92, true), 40, 10, 0, 0, 7); g.fill(); blur(0); g.restore();
+}
+// dark mouth cavity
+g.fillStyle = DK; g.beginPath(); mv(-33, 44, true); ln(33, 44, true); ln(31, 64 + open, true); ln(-31, 64 + open, true); g.closePath(); g.fill();
+
+function fang(x, yRoot, len, w, up) {
+  const [X] = P(x, 0, true), W = w * kx(x + FS);
+  g.fillStyle = LT; g.strokeStyle = DK; g.lineWidth = 1;
+  const tip = up ? yRoot + len : yRoot - len;
+  g.beginPath(); g.moveTo(X - W / 2, yRoot); g.quadraticCurveTo(X - W * 0.42, (yRoot + tip) / 2, X - 0.4, tip); g.lineTo(X + 0.4, tip); g.quadraticCurveTo(X + W * 0.42, (yRoot + tip) / 2, X + W / 2, yRoot); g.closePath(); g.fill(); g.stroke();
+}
+function worn(x, yRoot, len, w, up, chip = 0) {
+  const [X] = P(x, 0, true), W = w * kx(x + FS), dir = up ? 1 : -1, tip = yRoot + dir * len;
+  const tg = g.createLinearGradient(X, yRoot, X, tip); tg.addColorStop(0, '#6a6a6a'); tg.addColorStop(0.4, '#e2e2e2'); tg.addColorStop(1, '#ffffff');
+  g.fillStyle = tg; g.strokeStyle = DK; g.lineWidth = 0.9;
+  const wr = W * 0.78;
+  g.beginPath(); g.moveTo(X - wr / 2, yRoot);
+  g.bezierCurveTo(X - W / 2, yRoot + dir * len * 0.4, X - W / 2, tip - dir * len * 0.25, X - W * 0.42, tip);
+  if (chip) { g.lineTo(X - W * 0.1, tip - dir * 3); g.lineTo(X + W * 0.15, tip - dir * 1); } else g.quadraticCurveTo(X, tip + dir * 0.9, X + W * 0.42, tip);
+  g.bezierCurveTo(X + W / 2, tip - dir * len * 0.25, X + W / 2, yRoot + dir * len * 0.4, X + wr / 2, yRoot);
+  g.closePath(); g.fill(); g.stroke();
+  g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = 0.5; g.beginPath(); g.moveTo(X + W * 0.15, yRoot + dir * len * 0.3); g.lineTo(X + W * 0.15, tip - dir * len * 0.15); g.stroke();
+}
+function block(x, y0, h, w, up) {
+  const [X] = P(x, 0, true), W = w * kx(x + FS);
+  g.fillStyle = LT; g.strokeStyle = DK; g.lineWidth = 1.3;
+  g.beginPath(); g.roundRect(X - W / 2, up ? y0 : y0 - h, W, h, [up ? 1.5 : 0.5, up ? 1.5 : 0.5, up ? 0.5 : 1.5, up ? 0.5 : 1.5]); g.fill(); g.stroke();
+  g.strokeStyle = 'rgba(0,0,0,0.45)'; g.lineWidth = 0.6; g.beginPath(); g.moveTo(X - W * 0.2, up ? y0 + 2 : y0 - 2); g.lineTo(X - W * 0.2, up ? y0 + h - 2 : y0 - h + 2); g.stroke();
+}
+if (TEETH === 'fang') {
+  [[-28, 8, 6.5], [-21, 10, 7], [-13.5, 19, 8], [-6, 9, 7], [1, 11, 7], [8, 6, 7], [15.5, 21, 8.5], [23, 9, 7]].forEach(t => fang(t[0], 47, t[1], t[2], true));
+  [[-24, 8, 6.5], [-17, 12, 7], [-9.5, 9, 7], [5, 10, 7], [12, 7, 6.5], [19.5, 14, 7.5], [26, 7, 6]].forEach(t => fang(t[0], 62 + open, t[1], t[2], false));
+} else if (TEETH === 'worn') {
+  [[-25, 11, 6], [-18.6, 12.5, 6.2], [-12.2, 13, 6.4], [-5.8, 13, 6.2], [0.6, 12.5, 6.2], [13.4, 13, 6.4], [19.8, 12, 6], [26, 10, 5.6]].forEach(t => worn(t[0], 67, t[1], t[2], false));
+  [[-29, 11, 6.2], [-22.5, 13, 6.6], [-15.6, 15, 7], [-8.2, 15.5, 7.2], [-0.6, 16, 7.4], [7, 10, 7.2, 1], [14.6, 15.5, 7], [21.8, 13, 6.6], [28.4, 10.5, 6]].forEach(t => worn(t[0], 40, t[1], t[2], true, t[3]));
+} else if (TEETH === 'broken') {
+  [[-25, 9, 6], [-12.2, 12, 6.4, 1], [-5.8, 13, 6.2], [13.4, 11, 6.4], [26, 8, 5.6, 1]].forEach(t => worn(t[0], 66 + open, t[1], t[2], false, t[3]));
+  [[-29, 10, 6.2], [-22.5, 6, 6.6, 1], [-8.2, 16, 7.2], [-0.6, 17, 7.4], [14.6, 9, 7, 1], [21.8, 14, 6.6]].forEach(t => worn(t[0], 40, t[1], t[2], true, t[3]));
+  // dark root sockets where teeth are gone
+  g.fillStyle = 'rgba(0,0,0,0.9)'; [[-15.6, 42], [7, 42], [-18.6, 64], [0.6, 64], [19.8, 64]].forEach(([x, y]) => { const [X] = P(x, 0, true); g.beginPath(); g.ellipse(X, y, 2.6 * kx(x + FS), 3.4, 0, 0, 7); g.fill(); });
+} else if (TEETH === 'clenched') {
+  const xs = [-28, -21, -14, -7, 0, 7, 14, 21, 28];
+  xs.forEach((x, i) => block(x, 40, 13.5 - Math.abs(i - 4) * 0.5, 7.2, true));
+  xs.forEach((x, i) => block(x + 3.5, 67, 12.5 - Math.abs(i - 4) * 0.5, 7, false));
+  g.strokeStyle = DK; g.lineWidth = 1.6; g.beginPath(); mv(-32, 53.7, true); ln(32, 53.7, true); g.stroke();
+}
+// hinges
+g.strokeStyle = DK; g.lineWidth = 1.4; [-1, 1].forEach(d => { g.beginPath(); mv(d * 40, 40, true); ln(d * 37, 54 + open, true); g.stroke(); });
+
+// ---- crown + cross (follows tilt/turn) ----
+const cb = -70, cw = 118, ch = 50, cx0 = -cw / 2;
+g.fillStyle = LT;
+g.beginPath(); mv(cx0 - 4, cb + 14); qd(0, cb + 24, cx0 + cw + 4, cb + 14); ln(cx0 + cw + 2, cb - 4); qd(0, cb + 6, cx0 - 2, cb - 4); g.closePath(); g.fill();
+g.strokeStyle = DK; g.lineWidth = 1;
+g.beginPath(); mv(cx0, cb - 1); qd(0, cb + 9, cx0 + cw, cb - 1); g.stroke();
+g.beginPath(); mv(cx0 - 2, cb + 11); qd(0, cb + 21, cx0 + cw + 2, cb + 11); g.stroke();
+g.fillStyle = DK;
+[-40, -20, 0, 20, 40].forEach((dx, i) => { const y = cb + 5 + 5 * (1 - (dx / 60) ** 2), [X, Y] = P(dx, y), w = 4 * kx(dx);
+  if (i % 2 === 0) { g.beginPath(); g.moveTo(X, Y - 4); g.lineTo(X + w, Y); g.lineTo(X, Y + 4); g.lineTo(X - w, Y); g.closePath(); g.fill(); } else { g.beginPath(); g.ellipse(X, Y, 2.4 * kx(dx), 2.4, 0, 0, 7); g.fill(); } });
+const spikes = () => { g.beginPath(); mv(cx0 - 2, cb - 4); for (let i = 0; i <= 10; i++) { const x = cx0 + cw * i / 10; ln(x, i % 2 === 0 ? cb - ch * (i === 5 ? 1 : 0.82) : cb - 12); } ln(cx0 + cw + 2, cb - 4); qd(0, cb + 6, cx0 - 2, cb - 4); g.closePath(); };
+spikes(); g.fillStyle = LT; g.fill();
+spikes(); hatchClip(3.2, Math.PI / 2, 0.55);
+for (let i = 0; i <= 10; i += 2) { if (i === 5) continue; const x = cx0 + cw * i / 10, [X, Y] = P(x, cb - ch * 0.82 - 4); g.fillStyle = LT; g.beginPath(); g.ellipse(X, Y, 5 * kx(x), 5, 0, 0, 7); g.fill(); g.strokeStyle = DK; g.lineWidth = 0.8; g.beginPath(); g.ellipse(X, Y, 3 * kx(x), 3, 0, 0, 7); g.stroke(); }
+const cry = cb - ch - 2;
+g.fillStyle = LT;
+g.beginPath(); mv(-5, cry - 46); ln(5, cry - 46); ln(5, cry + 2); ln(-5, cry + 2); g.closePath(); g.fill();
+g.beginPath(); mv(-18, cry - 34); ln(18, cry - 34); ln(18, cry - 24); ln(-18, cry - 24); g.closePath(); g.fill();
+g.strokeStyle = DK; g.lineWidth = 0.9; g.beginPath(); mv(0, cry - 42); ln(0, cry - 2); mv(-15, cry - 29); ln(15, cry - 29); g.stroke();
+g.strokeStyle = LT; g.lineWidth = 0.7;
+for (let i = 0; i < 18; i++) { const a = -Math.PI / 2 + (i - 8.5) * 0.17, r0 = 30, r1 = 44 + (i % 2) * 8; g.beginPath(); g.moveTo(Math.cos(a) * r0, cry - 29 + Math.sin(a) * r0); g.lineTo(Math.cos(a) * r1, cry - 29 + Math.sin(a) * r1); g.stroke(); }
+g.restore();
+
+// crescent moons
+[[48, 62, 1], [S - 48, 62, -1]].forEach(([x, y, d]) => { g.fillStyle = LT; g.beginPath(); g.arc(x, y, 14, 0, 7); g.fill(); g.fillStyle = DK; g.beginPath(); g.arc(x + d * 6, y - 2, 13, 0, 7); g.fill(); });
+
+if (LAYER === 'eye') {
+  document.documentElement.style.background = 'transparent'; document.body.style.background = 'transparent';
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height);
+  g.setTransform(EYE_M);
+  const [ex, ey] = EYE_P;
+  { const bgr = g.createRadialGradient(ex, ey, 2, ex, ey, 46); bgr.addColorStop(0, 'rgba(255,40,25,0.55)'); bgr.addColorStop(0.35, 'rgba(220,20,15,0.18)'); bgr.addColorStop(1, 'rgba(160,0,0,0)'); g.fillStyle = bgr; g.fillRect(ex - 60, ey - 60, 120, 120); }
+  g.save(); g.shadowColor = 'rgba(255,30,20,1)'; g.shadowBlur = 14 * dpr;
+  { const ig = g.createRadialGradient(ex - 1, ey - 1, 0.5, ex, ey, 8); ig.addColorStop(0, '#fff6ea'); ig.addColorStop(0.22, '#ff8a6a'); ig.addColorStop(0.5, '#ff2414'); ig.addColorStop(0.85, '#a00000'); ig.addColorStop(1, 'rgba(90,0,0,0.9)'); g.fillStyle = ig; }
+  g.beginPath(); g.arc(ex, ey, 8, 0, 7); g.fill(); g.restore();
+  g.strokeStyle = 'rgba(255,60,40,0.9)'; g.lineWidth = 0.7; g.beginPath(); g.arc(ex, ey, 5.2, 0, 7); g.stroke();
+  { const fl = g.createLinearGradient(ex - 40, 0, ex + 40, 0); fl.addColorStop(0, 'rgba(255,40,30,0)'); fl.addColorStop(0.5, 'rgba(255,120,90,0.85)'); fl.addColorStop(1, 'rgba(255,40,30,0)'); g.fillStyle = fl; g.fillRect(ex - 40, ey - 0.6, 80, 1.2); }
+  g.fillStyle = 'rgba(255,240,230,0.95)'; g.beginPath(); g.arc(ex - 2, ey - 2.2, 1.1, 0, 7); g.fill();
+}
+document.title = 'ready';
+</script>
+</body></html>

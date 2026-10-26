@@ -1,0 +1,311 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>html,body{margin:0;background:#000}canvas{display:block}</style></head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// Occult skull set, engraved line-art like E4. Greyscale; graded to midnight blue in compose_set.py.
+// ?v=ouroboros|moth|candle|eye|hourglass|sigil   &layer=eye -> transparent red-optic overlay only
+const S = 400, C = S / 2;
+const cv = document.getElementById('c');
+const dpr = window.devicePixelRatio || 1;
+cv.width = S * dpr; cv.height = S * dpr; cv.style.width = S + 'px'; cv.style.height = S + 'px';
+const g = cv.getContext('2d'); g.scale(dpr, dpr);
+const LT = '#fff', DK = '#000';
+const Q = new URLSearchParams(location.search), V = Q.get('v') || 'ouroboros', LAYER = Q.get('layer');
+let seed = 41; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+g.lineJoin = 'round'; g.lineCap = 'round';
+let EYE = null; // where the red optic goes (set by skull())
+
+// ---------- helpers ----------
+function star(x, y, r, pts = 4, inner = 0.26) {
+  g.beginPath();
+  for (let i = 0; i < pts * 2; i++) { const a = -Math.PI / 2 + i * Math.PI / pts, rr = i % 2 ? r * inner : r; g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
+  g.closePath(); g.fill();
+}
+function hatchClip(sp, ang, alpha, col = '0,0,0', lw = 0.7) { // hatch inside current path
+  g.save(); g.clip();
+  g.strokeStyle = `rgba(${col},${alpha})`; g.lineWidth = lw;
+  const c = Math.cos(ang), s = Math.sin(ang);
+  for (let t = -600; t < 600; t += sp) { g.beginPath(); g.moveTo(C - c * 600 - s * t, C - s * 600 + c * t); g.lineTo(C + c * 600 - s * t, C + s * 600 + c * t); g.stroke(); }
+  g.restore();
+}
+function field(starAvoidR = 150, cy = C) {
+  g.fillStyle = DK; g.fillRect(0, 0, S, S);
+  g.fillStyle = LT;
+  for (let i = 0; i < 120; i++) {
+    const x = rnd() * S, y = rnd() * S;
+    if (Math.hypot(x - C, y - cy) < starAvoidR) continue;
+    if (rnd() < 0.62) { g.beginPath(); g.arc(x, y, 0.5 + rnd() * 1.1, 0, 7); g.fill(); } else star(x, y, 2.5 + rnd() * 4.5);
+  }
+}
+function rays(cx, cy, r0, r1, n = 120, lw = 0.7) {
+  g.strokeStyle = LT; g.lineWidth = lw;
+  for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2, L = r1 * (0.82 + (i % 3) * 0.09) + rnd() * 6; g.beginPath(); g.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0); g.lineTo(cx + Math.cos(a) * L, cy + Math.sin(a) * L); g.stroke(); }
+}
+function spikes(cx, cy, r0, r1, n = 12, d = 0.06) {
+  g.fillStyle = LT;
+  for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2 + Math.PI / n, L = i % 2 ? r1 * 0.88 : r1; g.beginPath(); g.moveTo(cx + Math.cos(a - d) * r0, cy + Math.sin(a - d) * r0); g.lineTo(cx + Math.cos(a) * L, cy + Math.sin(a) * L); g.lineTo(cx + Math.cos(a + d) * r0, cy + Math.sin(a + d) * r0); g.closePath(); g.fill(); }
+}
+function crescent(x, y, r, d = 1) {
+  g.fillStyle = LT; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  g.fillStyle = DK; g.beginPath(); g.arc(x + d * r * 0.43, y - r * 0.14, r * 0.93, 0, 7); g.fill();
+}
+
+// ---------- the skull (E4 language: angular scowling orbits, sharp nose, uneven pointed teeth) ----------
+function skull(sx, sy, k = 1, opts = {}) {
+  g.save(); g.translate(sx, sy); g.scale(k, k);
+  const path = () => {
+    g.beginPath();
+    g.moveTo(-62, 8);
+    g.bezierCurveTo(-74, -40, -50, -84, 0, -86);
+    g.bezierCurveTo(50, -84, 74, -40, 62, 8);
+    g.bezierCurveTo(60, 22, 52, 30, 46, 36);
+    g.lineTo(40, 52); g.bezierCurveTo(30, 56, 14, 58, 0, 58); g.bezierCurveTo(-14, 58, -30, 56, -40, 52);
+    g.lineTo(-46, 36); g.bezierCurveTo(-52, 30, -60, 22, -62, 8);
+    g.closePath();
+  };
+  path(); g.fillStyle = LT; g.fill();
+  // engraved side shading
+  g.beginPath(); g.moveTo(-64, 4); g.bezierCurveTo(-72, -40, -52, -80, -20, -84); g.bezierCurveTo(-46, -66, -56, -30, -48, 30); g.closePath();
+  hatchClip(2.6, 1.2, 0.9);
+  g.beginPath(); g.moveTo(64, 4); g.bezierCurveTo(72, -40, 52, -80, 20, -84); g.bezierCurveTo(46, -66, 56, -30, 48, 30); g.closePath();
+  hatchClip(3.4, -1.2, 0.55);
+  // cracks
+  g.strokeStyle = DK; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(6, -86); g.lineTo(2, -76); g.lineTo(8, -68); g.lineTo(3, -60); g.stroke();
+  // forehead mark (optional)
+  if (opts.mark === 'eye') {
+    g.fillStyle = DK; g.beginPath(); g.moveTo(-13, -50); g.quadraticCurveTo(0, -60, 13, -50); g.quadraticCurveTo(0, -40, -13, -50); g.fill();
+    g.fillStyle = LT; g.beginPath(); g.arc(0, -50, 3.4, 0, 7); g.fill(); g.fillStyle = DK; g.beginPath(); g.arc(0, -50, 1.5, 0, 7); g.fill();
+    g.strokeStyle = DK; g.lineWidth = 0.8; for (let i = -3; i <= 3; i++) { g.beginPath(); g.moveTo(i * 4, -57 + Math.abs(i) * 0.8); g.lineTo(i * 5.5, -64 + Math.abs(i) * 1.2); g.stroke(); }
+  } else if (opts.mark !== 'none') {
+    g.strokeStyle = DK; g.lineWidth = 1.3;
+    g.beginPath(); g.arc(0, -46, 5.5, 0, 7); g.stroke();
+    g.beginPath(); g.moveTo(0, -40.5); g.lineTo(0, -31); g.moveTo(-4.5, -35); g.lineTo(4.5, -35); g.stroke();
+    g.beginPath(); g.arc(0, -57, 5.5, 0.15 * Math.PI, 0.85 * Math.PI); g.stroke();
+  }
+  // orbits: angular scowl
+  const orbit = (d) => {
+    const ex = d * 26, ey = -10;
+    g.beginPath();
+    g.moveTo(ex - d * 15, ey - 2); g.lineTo(ex + d * 2, ey - 13);
+    g.quadraticCurveTo(ex + d * 14, ey - 18, ex + d * 19, ey - 14);
+    g.quadraticCurveTo(ex + d * 18, ey + 4, ex + d * 6, ey + 13);
+    g.quadraticCurveTo(ex - d * 6, ey + 16, ex - d * 13, ey + 8);
+    g.closePath();
+  };
+  [-1, 1].forEach(d => {
+    orbit(d); g.fillStyle = DK; g.fill();
+    g.save(); orbit(d); g.clip(); g.strokeStyle = 'rgba(255,255,255,0.28)'; g.lineWidth = 0.6;
+    for (let t = 0; t < 9; t++) { const y = -3 + t * 1.5; g.beginPath(); g.moveTo(d * 26 - 22, y); g.lineTo(d * 26 + 22, y - d * 3); g.stroke(); }
+    g.restore();
+    g.strokeStyle = DK; g.lineWidth = 1.2; g.beginPath(); g.moveTo(d * 12, -15); g.lineTo(d * 28, -25); g.quadraticCurveTo(d * 38, -29, d * 42, -26); g.stroke();
+  });
+  // nose
+  g.fillStyle = DK; g.beginPath(); g.moveTo(0, 6); g.bezierCurveTo(-3, 14, -12, 25, -9, 31); g.lineTo(0, 26); g.lineTo(9, 31); g.bezierCurveTo(12, 25, 3, 14, 0, 6); g.closePath(); g.fill();
+  // maxilla + jaw
+  g.fillStyle = LT; g.beginPath(); g.moveTo(-36, 34); g.lineTo(36, 34); g.lineTo(34, 50); g.lineTo(-34, 50); g.closePath(); g.fill();
+  const JD = opts.jaw ?? 4;
+  const jaw = () => { g.beginPath(); g.moveTo(-38, 54 + JD); g.lineTo(38, 54 + JD); g.bezierCurveTo(40, 72 + JD, 32, 88 + JD, 14, 92 + JD); g.lineTo(-14, 92 + JD); g.bezierCurveTo(-32, 88 + JD, -40, 72 + JD, -38, 54 + JD); g.closePath(); };
+  jaw(); g.fill();
+  g.beginPath(); g.moveTo(-38, 56 + JD); g.bezierCurveTo(-40, 72 + JD, -32, 88 + JD, -14, 92 + JD); g.lineTo(-20, 70 + JD); g.closePath(); hatchClip(2.8, 1.1, 0.8);
+  g.beginPath(); g.moveTo(38, 56 + JD); g.bezierCurveTo(40, 72 + JD, 32, 88 + JD, 14, 92 + JD); g.lineTo(20, 70 + JD); g.closePath(); hatchClip(3.4, -1.1, 0.5);
+  g.fillStyle = DK; g.beginPath(); g.moveTo(-32, 49); g.lineTo(32, 49); g.lineTo(30, 60 + JD); g.lineTo(-30, 60 + JD); g.closePath(); g.fill();
+  const fang = (x, yRoot, len, w, up) => {
+    g.fillStyle = LT; g.strokeStyle = DK; g.lineWidth = 1;
+    const tip = up ? yRoot + len : yRoot - len;
+    g.beginPath(); g.moveTo(x - w / 2, yRoot); g.quadraticCurveTo(x - w * 0.42, (yRoot + tip) / 2, x - 0.4, tip); g.lineTo(x + 0.4, tip); g.quadraticCurveTo(x + w * 0.42, (yRoot + tip) / 2, x + w / 2, yRoot); g.closePath(); g.fill(); g.stroke();
+  };
+  [[-28, 8, 6.5], [-21, 10, 7], [-13.5, 19, 8], [-6, 9, 7], [1, 11, 7], [8, 6, 7], [15.5, 21, 8.5], [23, 9, 7]].forEach(t => fang(t[0], 47, t[1], t[2], true));
+  [[-24, 8, 6.5], [-17, 12, 7], [-9.5, 9, 7], [5, 10, 7], [12, 7, 6.5], [19.5, 14, 7.5], [26, 7, 6]].forEach(t => fang(t[0], 62 + JD, t[1], t[2], false));
+  g.strokeStyle = DK; g.lineWidth = 1.4; [-1, 1].forEach(d => { g.beginPath(); g.moveTo(d * 40, 40); g.lineTo(d * 37, 54 + JD); g.stroke(); });
+  // record red-eye position (viewer's right orbit) in canvas coords
+  const m = g.getTransform();
+  const p = new DOMPoint(26, -8).matrixTransform(m);
+  EYE = { x: p.x / dpr, y: p.y / dpr, k: k };
+  g.restore();
+}
+
+// ---------- scenes ----------
+function crownCross(sx, top, w = 110, h = 46, cross = true) { // crown sitting at y=top (band bottom), cross above
+  const x0 = sx - w / 2;
+  g.fillStyle = LT;
+  g.beginPath(); g.moveTo(x0, top);
+  for (let i = 0; i <= 10; i++) { const x = x0 + w * i / 10; g.lineTo(x, i % 2 === 0 ? top - h * (i === 5 ? 1 : 0.86) : top - 12); }
+  g.lineTo(x0 + w, top); g.lineTo(x0 + w + 2, top + 14); g.quadraticCurveTo(sx, top + 22, x0 - 2, top + 14); g.closePath(); g.fill();
+  g.beginPath(); g.moveTo(x0, top); for (let i = 0; i <= 10; i++) { const x = x0 + w * i / 10; g.lineTo(x, i % 2 === 0 ? top - h * (i === 5 ? 1 : 0.86) : top - 12); } g.lineTo(x0 + w, top); g.closePath();
+  hatchClip(3.2, Math.PI / 2, 0.55);
+  g.strokeStyle = DK; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, top + 3); g.quadraticCurveTo(sx, top + 11, x0 + w, top + 3); g.stroke();
+  g.fillStyle = DK; [-36, -18, 0, 18, 36].forEach((dx, i) => { const y = top + 8 + 4 * (1 - (dx / 55) ** 2); if (i % 2) { g.beginPath(); g.arc(sx + dx, y, 2.2, 0, 7); g.fill(); } else { g.beginPath(); g.moveTo(sx + dx, y - 3.5); g.lineTo(sx + dx + 3.5, y); g.lineTo(sx + dx, y + 3.5); g.lineTo(sx + dx - 3.5, y); g.closePath(); g.fill(); } });
+  if (!cross) return;
+  const cy = top - h - 2; g.fillStyle = LT; g.fillRect(sx - 4.5, cy - 40, 9, 42); g.fillRect(sx - 15, cy - 30, 30, 9);
+  g.strokeStyle = DK; g.lineWidth = 0.8; g.beginPath(); g.moveTo(sx, cy - 37); g.lineTo(sx, cy - 1); g.moveTo(sx - 12, cy - 25.5); g.lineTo(sx + 12, cy - 25.5); g.stroke();
+}
+
+const scenes = {
+  // serpent devouring its tail around the skull
+  ouroboros() {
+    field(178);
+    rays(C, C, 120, 160, 110);
+    const R = 150, cy = C + 6;
+    // serpent body: thick ring with scale hatching
+    g.lineWidth = 22; g.strokeStyle = LT; g.beginPath(); g.arc(C, cy, R, Math.PI * 0.58, Math.PI * 2.46); g.stroke();
+    g.save(); g.beginPath(); g.arc(C, cy, R + 11, 0, 7); g.arc(C, cy, R - 11, 0, 7, true); g.clip();
+    g.strokeStyle = DK; g.lineWidth = 0.9;
+    for (let i = 0; i < 120; i++) { const a = i / 120 * Math.PI * 2; for (let j = -1; j <= 1; j++) { const r = R + j * 7; g.beginPath(); g.arc(C + Math.cos(a) * r, cy + Math.sin(a) * r, 3.4, a + 0.6, a + 2.6); g.stroke(); } }
+    g.restore();
+    g.strokeStyle = DK; g.lineWidth = 1.2; g.beginPath(); g.arc(C, cy, R + 11, Math.PI * 0.58, Math.PI * 2.46); g.stroke(); g.beginPath(); g.arc(C, cy, R - 11, Math.PI * 0.58, Math.PI * 2.46); g.stroke();
+    // head at top biting the tail
+    const ha = Math.PI * 0.56, hx = C + Math.cos(ha) * R, hy = cy + Math.sin(ha) * R;
+    g.save(); g.translate(hx, hy); g.rotate(ha + Math.PI / 2 + Math.PI);
+    g.scale(1.25, 1.25); g.fillStyle = LT; g.beginPath(); g.moveTo(-13, 0); g.bezierCurveTo(-16, -20, -8, -38, 0, -40); g.bezierCurveTo(8, -38, 16, -20, 13, 0); g.closePath(); g.fill();
+    g.strokeStyle = DK; g.lineWidth = 1.1; g.stroke();
+    g.fillStyle = DK; g.beginPath(); g.ellipse(-6, -24, 2.4, 4, 0.3, 0, 7); g.fill(); g.beginPath(); g.ellipse(6, -24, 2.4, 4, -0.3, 0, 7); g.fill();
+    g.beginPath(); g.moveTo(-5, -38); g.lineTo(0, -32); g.lineTo(5, -38); g.stroke();
+    g.restore();
+    // tail tip disappearing into the jaws
+    const ta = Math.PI * 0.60, tx = C + Math.cos(ta) * R, ty = cy + Math.sin(ta) * R;
+    g.fillStyle = LT; g.beginPath(); g.arc(tx, ty, 6, 0, 7); g.fill();
+    skull(C, C + 26, 0.98);
+    crownCross(C, C - 48, 100, 40);
+  },
+  // death's-head hawkmoth: skull as the thorax, wings spread
+  moth() {
+    field(60);
+    const cy = C + 20;
+    [-1, 1].forEach(d => {
+      // forewing
+      g.fillStyle = LT; g.beginPath(); g.moveTo(C + d * 30, cy - 40);
+      g.bezierCurveTo(C + d * 90, cy - 120, C + d * 175, cy - 120, C + d * 190, cy - 80);
+      g.bezierCurveTo(C + d * 170, cy - 40, C + d * 120, cy - 10, C + d * 50, cy + 5); g.closePath(); g.fill();
+      g.save(); g.clip();
+      g.strokeStyle = DK; g.lineWidth = 0.8;
+      for (let i = 0; i < 9; i++) { g.beginPath(); g.moveTo(C + d * 40, cy - 25); g.quadraticCurveTo(C + d * (90 + i * 6), cy - 110 + i * 6, C + d * (150 + i * 6), cy - 110 + i * 11); g.stroke(); }
+      g.lineWidth = 0.6; for (let t = 0; t < 40; t++) { g.beginPath(); g.moveTo(C + d * (50 + t * 3.5), cy - 20 - t * 1.8); g.lineTo(C + d * (60 + t * 3.5), cy - 2 - t * 1.6); g.stroke(); }
+      g.lineWidth = 5; g.beginPath(); g.moveTo(C + d * 70, cy - 70); g.quadraticCurveTo(C + d * 120, cy - 60, C + d * 170, cy - 92); g.stroke();
+      g.restore();
+      g.strokeStyle = DK; g.lineWidth = 1.3; g.beginPath(); g.moveTo(C + d * 30, cy - 40); g.bezierCurveTo(C + d * 90, cy - 120, C + d * 175, cy - 120, C + d * 190, cy - 80); g.stroke();
+      // eyespots on wings
+      g.fillStyle = DK; g.beginPath(); g.ellipse(C + d * 135, cy - 70, 11, 8, d * 0.4, 0, 7); g.fill();
+      g.fillStyle = LT; g.beginPath(); g.ellipse(C + d * 135, cy - 70, 4, 3, d * 0.4, 0, 7); g.fill();
+      // hindwing
+      g.fillStyle = LT; g.beginPath(); g.moveTo(C + d * 40, cy + 5);
+      g.bezierCurveTo(C + d * 120, cy - 5, C + d * 160, cy + 40, C + d * 135, cy + 90);
+      g.bezierCurveTo(C + d * 100, cy + 110, C + d * 60, cy + 70, C + d * 34, cy + 40); g.closePath(); g.fill();
+      g.save(); g.clip(); g.strokeStyle = DK;
+      g.lineWidth = 5; g.beginPath(); g.arc(C + d * 40, cy + 20, 78, 0, 7); g.stroke();
+      g.lineWidth = 0.6; for (let t = -300; t < 300; t += 7) { g.beginPath(); g.moveTo(C + d * 40, cy + 5); g.lineTo(C + d * 40 + d * 200, cy + 5 + t); g.stroke(); }
+      g.restore();
+      g.strokeStyle = DK; g.lineWidth = 1.2; g.beginPath(); g.moveTo(C + d * 40, cy + 5); g.bezierCurveTo(C + d * 120, cy - 5, C + d * 160, cy + 40, C + d * 135, cy + 90); g.bezierCurveTo(C + d * 100, cy + 110, C + d * 60, cy + 70, C + d * 34, cy + 40); g.stroke();
+      // antennae
+      g.strokeStyle = LT; g.lineWidth = 1.4; g.beginPath(); g.moveTo(C + d * 10, cy - 100); g.quadraticCurveTo(C + d * 30, cy - 150, C + d * 62, cy - 160); g.stroke();
+    });
+    // furry abdomen under the skull
+    g.fillStyle = LT; g.beginPath(); g.moveTo(C - 20, cy + 62); g.bezierCurveTo(C - 28, cy + 110, C - 10, cy + 150, C, cy + 162); g.bezierCurveTo(C + 10, cy + 150, C + 28, cy + 110, C + 20, cy + 62); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(C - 20, cy + 62); g.bezierCurveTo(C - 28, cy + 110, C - 10, cy + 150, C, cy + 162); g.bezierCurveTo(C + 10, cy + 150, C + 28, cy + 110, C + 20, cy + 62); g.closePath();
+    hatchClip(2.4, 1.0, 0.7);
+    g.strokeStyle = DK; g.lineWidth = 1.6; for (let i = 0; i < 6; i++) { const y = cy + 74 + i * 14; g.beginPath(); g.moveTo(C - 22 + i * 2.5, y); g.quadraticCurveTo(C, y + 7, C + 22 - i * 2.5, y); g.stroke(); }
+    skull(C, cy - 34, 0.86, { mark: 'none' });
+  },
+  // memento mori candle burning on the cranium
+  candle() {
+    field(150, C - 40);
+    const fx = C, fy = C - 132;
+    rays(fx, fy, 22, 120, 90, 0.6); spikes(fx, fy, 22, 70, 16, 0.08);
+    // candle
+    g.fillStyle = LT; g.fillRect(C - 15, C - 112, 30, 62);
+    g.beginPath(); g.moveTo(C - 15, C - 112); for (let i = 0; i <= 6; i++) g.lineTo(C - 15 + i * 5, C - 112 + (i % 2 ? 4 : -2)); g.lineTo(C + 15, C - 112); g.fill();
+    g.beginPath(); g.rect(C - 15, C - 112, 30, 62); hatchClip(2.6, Math.PI / 2, 0.5);
+    // drips down the skull
+    g.fillStyle = LT; [[-12, 26], [-2, 40], [9, 18], [13, 33]].forEach(([dx, L]) => { g.beginPath(); g.moveTo(C + dx - 3, C - 52); g.lineTo(C + dx - 3, C - 52 + L); g.arc(C + dx, C - 52 + L, 3, Math.PI, 0, true); g.lineTo(C + dx + 3, C - 52); g.fill(); });
+    // flame
+    g.fillStyle = LT; g.beginPath(); g.moveTo(fx, fy - 26); g.bezierCurveTo(fx + 12, fy - 6, fx + 10, fy + 10, fx, fy + 16); g.bezierCurveTo(fx - 10, fy + 10, fx - 12, fy - 6, fx, fy - 26); g.fill();
+    g.fillStyle = DK; g.beginPath(); g.moveTo(fx, fy - 8); g.bezierCurveTo(fx + 5, fy + 2, fx + 4, fy + 9, fx, fy + 12); g.bezierCurveTo(fx - 4, fy + 9, fx - 5, fy + 2, fx, fy - 8); g.fill();
+    g.strokeStyle = LT; g.lineWidth = 1.4; g.beginPath(); g.moveTo(fx, fy + 12); g.lineTo(fx, fy + 22); g.stroke();
+    skull(C, C + 34, 0.98, { mark: 'cross' });
+    crescent(52, 64, 14, 1); crescent(S - 52, 64, 14, -1);
+  },
+  // all-seeing eye in a triangle, skull at the base
+  eye() {
+    field(175);
+    rays(C, C + 10, 150, 190, 150, 0.6);
+    const tri = [[C, C - 170], [C + 168, C + 132], [C - 168, C + 132]];
+    g.strokeStyle = LT; g.lineWidth = 3; g.beginPath(); tri.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath(); g.stroke();
+    g.lineWidth = 1; const t2 = tri.map(([x, y]) => [C + (x - C) * 0.92, C + 10 + (y - C - 10) * 0.92]);
+    g.beginPath(); t2.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath(); g.stroke();
+    // eye of providence near the apex
+    const ax = C, ay = C - 92;
+    g.fillStyle = LT; g.beginPath(); g.moveTo(ax - 24, ay); g.quadraticCurveTo(ax, ay - 20, ax + 24, ay); g.quadraticCurveTo(ax, ay + 20, ax - 24, ay); g.fill();
+    g.fillStyle = DK; g.beginPath(); g.arc(ax, ay, 8, 0, 7); g.fill();
+    g.fillStyle = LT; g.beginPath(); g.arc(ax - 2, ay - 2, 2, 0, 7); g.fill();
+    g.strokeStyle = LT; g.lineWidth = 0.8; for (let i = 0; i < 28; i++) { const a = i / 28 * Math.PI * 2; g.beginPath(); g.moveTo(ax + Math.cos(a) * 28, ay + Math.sin(a) * 18); g.lineTo(ax + Math.cos(a) * 40, ay + Math.sin(a) * 28); g.stroke(); }
+    skull(C, C + 58, 0.92, { mark: 'none' });
+    crownCross(C, C + 58 - 68, 92, 28, false);
+  },
+  // tempus fugit: winged hourglass behind the skull, crossed bones
+  hourglass() {
+    field(150);
+    const hy = C - 6;
+    [-1, 1].forEach(d => {
+      for (let i = 0; i < 7; i++) {
+        const L = 150 - i * 15, a = -0.45 + i * 0.14;
+        g.fillStyle = LT; g.beginPath(); g.moveTo(C + d * 50, hy - 50 + i * 4);
+        g.quadraticCurveTo(C + d * (50 + L * 0.6), hy - 90 + i * 20, C + d * (50 + L), hy - 80 + i * 24);
+        g.quadraticCurveTo(C + d * (50 + L * 0.7), hy - 64 + i * 22, C + d * 50, hy - 30 + i * 6); g.closePath(); g.fill();
+        g.strokeStyle = DK; g.lineWidth = 1; g.stroke();
+        g.beginPath(); g.moveTo(C + d * 60, hy - 46 + i * 5); g.quadraticCurveTo(C + d * (50 + L * 0.6), hy - 82 + i * 21, C + d * (46 + L), hy - 79 + i * 24); g.lineWidth = 0.7; g.stroke();
+      }
+    });
+    // hourglass
+    g.fillStyle = LT; g.fillRect(C - 46, hy - 150, 92, 10); g.fillRect(C - 46, hy + 130, 92, 10);
+    g.strokeStyle = LT; g.lineWidth = 2; g.beginPath(); g.moveTo(C - 38, hy - 140); g.bezierCurveTo(C - 38, hy - 40, C - 4, hy - 20, C - 4, hy); g.bezierCurveTo(C - 4, hy + 20, C - 38, hy + 40, C - 38, hy + 130); g.stroke();
+    g.beginPath(); g.moveTo(C + 38, hy - 140); g.bezierCurveTo(C + 38, hy - 40, C + 4, hy - 20, C + 4, hy); g.bezierCurveTo(C + 4, hy + 20, C + 38, hy + 40, C + 38, hy + 130); g.stroke();
+    // crossed bones under the skull
+    [-1, 1].forEach(d => {
+      g.save(); g.translate(C, C + 120); g.rotate(d * 0.5);
+      g.fillStyle = LT; g.fillRect(-90, -5, 180, 10);
+      [[-90], [90]].forEach(([x]) => { g.beginPath(); g.arc(x, -6, 7, 0, 7); g.arc(x, 6, 7, 0, 7); g.fill(); });
+      g.strokeStyle = DK; g.lineWidth = 0.8; g.beginPath(); g.moveTo(-80, 0); g.lineTo(80, 0); g.stroke();
+      g.restore();
+    });
+    skull(C, C + 16, 0.98);
+  },
+  // skull at the centre of an alchemical seal
+  sigil() {
+    field(185);
+    const cy = C + 4;
+    g.strokeStyle = LT;
+    [[182, 2], [176, 0.8], [140, 1.6], [134, 0.7]].forEach(([r, w]) => { g.lineWidth = w; g.beginPath(); g.arc(C, cy, r, 0, 7); g.stroke(); });
+    // planetary glyph band
+    g.fillStyle = LT; g.font = '600 20px "Apple Symbols", "Segoe UI Symbol", serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const glyphs = ['☿', '♄', '♃', '♂', '☉', '♀', '☽', '🜍', '🜔', '🜂', '🜄', '🜁', '🜃', '🝆'];
+    glyphs.forEach((ch, i) => { const a = -Math.PI / 2 + i / glyphs.length * Math.PI * 2; g.save(); g.translate(C + Math.cos(a) * 158, cy + Math.sin(a) * 158); g.rotate(a + Math.PI / 2); g.fillText(ch, 0, 0); g.restore(); });
+    // square + two triangles (hexagram-free: squared circle sigil)
+    g.lineWidth = 1.3;
+    g.beginPath(); for (let i = 0; i < 4; i++) { const a = Math.PI / 4 + i * Math.PI / 2; g.lineTo(C + Math.cos(a) * 134, cy + Math.sin(a) * 134); } g.closePath(); g.stroke();
+    g.beginPath(); for (let i = 0; i < 3; i++) { const a = -Math.PI / 2 + i * 2 * Math.PI / 3; g.lineTo(C + Math.cos(a) * 134, cy + Math.sin(a) * 134); } g.closePath(); g.stroke();
+    // ticks
+    for (let i = 0; i < 72; i++) { const a = i / 72 * Math.PI * 2; g.lineWidth = 0.7; g.beginPath(); g.moveTo(C + Math.cos(a) * 176, cy + Math.sin(a) * 176); g.lineTo(C + Math.cos(a) * 170, cy + Math.sin(a) * 170); g.stroke(); }
+    skull(C, C + 18, 0.96);
+  },
+};
+scenes[V]();
+
+if (LAYER === 'eye') {
+  document.documentElement.style.background = 'transparent'; document.body.style.background = 'transparent';
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height); g.restore();
+  const { x: ex, y: ey, k } = EYE;
+  g.save(); g.translate(ex, ey); g.scale(k, k); g.translate(-ex, -ey);
+  { const bg = g.createRadialGradient(ex, ey, 2, ex, ey, 46); bg.addColorStop(0, 'rgba(255,40,25,0.55)'); bg.addColorStop(0.35, 'rgba(220,20,15,0.18)'); bg.addColorStop(1, 'rgba(160,0,0,0)'); g.fillStyle = bg; g.fillRect(ex - 60, ey - 60, 120, 120); }
+  g.save(); g.shadowColor = 'rgba(255,30,20,1)'; g.shadowBlur = 14;
+  { const ig = g.createRadialGradient(ex - 1, ey - 1, 0.5, ex, ey, 8); ig.addColorStop(0, '#fff6ea'); ig.addColorStop(0.22, '#ff8a6a'); ig.addColorStop(0.5, '#ff2414'); ig.addColorStop(0.85, '#a00000'); ig.addColorStop(1, 'rgba(90,0,0,0.9)'); g.fillStyle = ig; }
+  g.beginPath(); g.arc(ex, ey, 8, 0, 7); g.fill(); g.restore();
+  g.strokeStyle = 'rgba(255,60,40,0.9)'; g.lineWidth = 0.7; g.beginPath(); g.arc(ex, ey, 5.2, 0, 7); g.stroke();
+  { const fl = g.createLinearGradient(ex - 40, 0, ex + 40, 0); fl.addColorStop(0, 'rgba(255,40,30,0)'); fl.addColorStop(0.5, 'rgba(255,120,90,0.85)'); fl.addColorStop(1, 'rgba(255,40,30,0)'); g.fillStyle = fl; g.fillRect(ex - 40, ey - 0.6, 80, 1.2); }
+  g.fillStyle = 'rgba(255,240,230,0.95)'; g.beginPath(); g.arc(ex - 2, ey - 2.2, 1.1, 0, 7); g.fill();
+  g.restore();
+}
+document.title = 'ready';
+</script>
+</body></html>

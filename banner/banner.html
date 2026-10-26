@@ -1,0 +1,375 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  html,body{margin:0;padding:0;background:#050914;}
+  canvas{display:block;}
+</style></head>
+<body>
+<canvas id="c" width="1500" height="500"></canvas>
+<script>
+const W = 1500, H = 500;
+const cv = document.getElementById('c');
+const dpr = window.devicePixelRatio || 1;
+cv.width = W * dpr; cv.height = H * dpr;
+cv.style.width = W + 'px'; cv.style.height = H + 'px';
+const g = cv.getContext('2d');
+g.scale(dpr, dpr);
+
+// deterministic RNG
+let seed = 1337;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+// ---------- projection ----------
+const CX = 930, HY = 140, F = 700, CAM_H = 2.05, D0 = 4.4;
+function P(x, z) { // board coords: x 0..8 (files), z 0..8 (ranks, 0 = nearest)
+  const D = z + D0;
+  return [CX + (x - 4) * F / D, HY + CAM_H * F / D, F / D];
+}
+
+// ---------- sky ----------
+function sky() {
+  const sg = g.createLinearGradient(0, 0, 0, H);
+  sg.addColorStop(0, '#03060f');
+  sg.addColorStop(0.28, '#071330');
+  sg.addColorStop(0.45, '#0c2250');
+  sg.addColorStop(1, '#040810');
+  g.fillStyle = sg; g.fillRect(0, 0, W, H);
+
+  // stars
+  for (let i = 0; i < 260; i++) {
+    const x = rnd() * W, y = rnd() * 175, r = rnd() * 1.2 + 0.2;
+    g.globalAlpha = 0.25 + rnd() * 0.6;
+    g.fillStyle = rnd() < 0.15 ? '#9fffcf' : '#cfe0ff';
+    g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  }
+  g.globalAlpha = 1;
+
+  // moon-ish glow behind the action
+  const mg = g.createRadialGradient(1120, 95, 5, 1120, 95, 260);
+  mg.addColorStop(0, 'rgba(120,255,190,0.20)');
+  mg.addColorStop(0.4, 'rgba(60,140,255,0.08)');
+  mg.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = mg; g.fillRect(0, 0, W, H);
+
+  // candlestick skyline on the horizon
+  let p = 60;
+  const cw = 9, gap = 5;
+  for (let x = 10; x < W; x += cw + gap) {
+    const o = p;
+    p += (rnd() - 0.47) * 16;
+    p = Math.max(15, Math.min(118, p));
+    const c = p;
+    const hi = Math.max(o, c) + rnd() * 12, lo = Math.min(o, c) - rnd() * 8;
+    const up = c >= o;
+    const col = up ? '57,255,136' : '255,59,107';
+    const a = 0.16 + 0.10 * Math.sin(x / 140) ** 2;
+    g.strokeStyle = `rgba(${col},${a})`; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(x + cw / 2, HY - hi); g.lineTo(x + cw / 2, HY - Math.max(0, lo)); g.stroke();
+    g.fillStyle = `rgba(${col},${a + 0.06})`;
+    g.fillRect(x, HY - Math.max(o, c), cw, Math.max(2, Math.abs(c - o)));
+  }
+  // horizon haze
+  const hz = g.createLinearGradient(0, HY - 40, 0, HY + 40);
+  hz.addColorStop(0, 'rgba(40,120,255,0)');
+  hz.addColorStop(0.5, 'rgba(70,170,255,0.22)');
+  hz.addColorStop(1, 'rgba(40,120,255,0)');
+  g.fillStyle = hz; g.fillRect(0, HY - 40, W, 80);
+}
+
+// ---------- ground grid (infinite neon floor) ----------
+function floor() {
+  g.save();
+  g.beginPath(); g.rect(0, HY, W, H - HY); g.clip();
+  const fg = g.createLinearGradient(0, HY, 0, H);
+  fg.addColorStop(0, '#08142e'); fg.addColorStop(1, '#03070f');
+  g.fillStyle = fg; g.fillRect(0, HY, W, H - HY);
+  g.lineWidth = 1;
+  for (let x = -40; x <= 48; x++) {
+    const [x1, y1] = P(x, 0 - 3), [x2, y2] = P(x, 60);
+    g.strokeStyle = 'rgba(60,140,255,0.10)';
+    g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+  }
+  for (let z = -3; z < 60; z++) {
+    const [x1, y1] = P(-40, z), [x2, y2] = P(48, z);
+    g.strokeStyle = `rgba(60,140,255,${0.12 * Math.min(1, 3 / (z + 4))})`;
+    g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+  }
+  g.restore();
+}
+
+// ---------- board ----------
+const glowSquares = { '1,7': 'red', '2,7': 'red', '3,7': 'red', '4,7': 'red', '5,7': 'redking', '5,6': 'none' };
+function board() {
+  // board slab edge (front)
+  const [ax, ay] = P(0, 0), [bx, by] = P(8, 0);
+  g.fillStyle = '#0a0f1c';
+  g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.lineTo(bx, by + 30); g.lineTo(ax, ay + 30); g.fill();
+
+  for (let z = 7; z >= 0; z--) for (let x = 0; x < 8; x++) {
+    const a = P(x, z), b = P(x + 1, z), c = P(x + 1, z + 1), d = P(x, z + 1);
+    const light = (x + z) % 2 === 1;
+    const fog = Math.min(1, z / 9);
+    let col = light ? [38, 62, 112] : [10, 20, 44];
+    const k = glowSquares[x + ',' + z];
+    g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.lineTo(c[0], c[1]); g.lineTo(d[0], d[1]); g.closePath();
+    const grad = g.createLinearGradient(0, d[1], 0, a[1]);
+    grad.addColorStop(0, `rgb(${col.map(v => Math.round(v * (1 - 0.35 * fog))).join(',')})`);
+    grad.addColorStop(1, `rgb(${col.join(',')})`);
+    g.fillStyle = grad; g.fill();
+    if (k === 'red' || k === 'redking') {
+      g.fillStyle = k === 'redking' ? 'rgba(255,40,90,0.42)' : 'rgba(255,40,90,0.13)';
+      g.fill();
+    }
+    g.strokeStyle = 'rgba(110,190,255,0.35)'; g.lineWidth = 1; g.stroke();
+  }
+  // glowing board border
+  const c0 = P(0, 0), c1 = P(8, 0), c2 = P(8, 8), c3 = P(0, 8);
+  g.save();
+  g.shadowColor = '#3fd0ff'; g.shadowBlur = 18;
+  g.strokeStyle = 'rgba(90,210,255,0.9)'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(c0[0], c0[1]); g.lineTo(c1[0], c1[1]); g.lineTo(c2[0], c2[1]); g.lineTo(c3[0], c3[1]); g.closePath(); g.stroke();
+  g.restore();
+
+  // coordinates on near edge
+  g.font = '600 13px "SF Mono", Menlo, monospace';
+  g.fillStyle = 'rgba(120,200,255,0.55)'; g.textAlign = 'center';
+  'abcdefgh'.split('').forEach((ch, i) => {
+    const [x, y] = P(i + 0.5, 0); if (y < H - 6) g.fillText(ch, x, y + 18);
+  });
+}
+
+// ---------- robots ----------
+const TEAM = {
+  us:   { body1: '#f2f6fb', body2: '#8d9ab0', trim: '#c9d3e2', eye: '#39ff88', visor: '#0b1220' },
+  them: { body1: '#4a5163', body2: '#0f1219', trim: '#262b36', eye: '#ff2d6b', visor: '#05060a' }
+};
+
+function rr(x, y, w, h, r) { g.beginPath(); g.roundRect(x, y, w, h, r); }
+
+function robot(type, team, fx, fz, opts = {}) {
+  const [x, y, s0] = P(fx + 0.5, fz + 0.5);
+  const s = s0 * (opts.scale || 1);
+  const T = TEAM[team];
+  const hgt = { pawn: 0.95, rook: 1.15, knight: 1.25, bishop: 1.3, queen: 1.5, king: 1.6 }[type] * s;
+
+  g.save();
+  // shadow / glow on the board
+  const sh = g.createRadialGradient(x, y, 1, x, y, 0.5 * s);
+  sh.addColorStop(0, team === 'us' ? 'rgba(57,255,136,0.35)' : 'rgba(255,45,107,0.35)');
+  sh.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = sh; g.beginPath(); g.ellipse(x, y, 0.5 * s, 0.17 * s, 0, 0, 7); g.fill();
+
+  const metal = (x0, x1) => {
+    const lg = g.createLinearGradient(x0, 0, x1, 0);
+    lg.addColorStop(0, T.body2); lg.addColorStop(0.35, T.body1); lg.addColorStop(0.6, T.body1); lg.addColorStop(1, T.body2);
+    return lg;
+  };
+
+  // pedestal
+  const bw = 0.62 * s, bh = 0.13 * s;
+  g.fillStyle = metal(x - bw / 2, x + bw / 2);
+  g.beginPath(); g.ellipse(x, y - bh * 0.3, bw / 2, bh * 0.6, 0, 0, 7); g.fill();
+  rr(x - bw / 2, y - bh * 1.3, bw, bh, bh * 0.3); g.fill();
+  g.fillStyle = T.eye; g.globalAlpha = 0.85;
+  g.fillRect(x - bw * 0.36, y - bh * 0.9, bw * 0.72, Math.max(1, s * 0.012));
+  g.globalAlpha = 1;
+
+  // torso (tapered)
+  const tb = y - bh * 1.25, tt = tb - hgt * 0.38;
+  const w1 = 0.46 * s, w2 = 0.28 * s;
+  g.fillStyle = metal(x - w1 / 2, x + w1 / 2);
+  g.beginPath();
+  g.moveTo(x - w1 / 2, tb); g.lineTo(x + w1 / 2, tb);
+  g.quadraticCurveTo(x + w2 / 2, (tb + tt) / 2, x + w2 / 2, tt);
+  g.lineTo(x - w2 / 2, tt);
+  g.quadraticCurveTo(x - w2 / 2, (tb + tt) / 2, x - w1 / 2, tb);
+  g.fill();
+  // chest light
+  g.save(); g.shadowColor = T.eye; g.shadowBlur = s * 0.12;
+  g.fillStyle = T.eye;
+  g.beginPath(); g.arc(x, tb - (tb - tt) * 0.45, s * 0.03, 0, 7); g.fill();
+  g.restore();
+
+  // arms
+  if (type !== 'rook') {
+    g.strokeStyle = T.trim; g.lineWidth = s * 0.05; g.lineCap = 'round';
+    const ay = tt + (tb - tt) * 0.15;
+    const armL = opts.armUp === 'L' ? [x - w1 * 0.95, ay - s * 0.3] : [x - w1 * 0.75, ay + s * 0.22];
+    const armR = opts.armUp === 'R' ? [x + w1 * 0.95, ay - s * 0.3] : [x + w1 * 0.75, ay + s * 0.22];
+    g.beginPath(); g.moveTo(x - w2 * 0.55, ay); g.lineTo(...armL); g.stroke();
+    g.beginPath(); g.moveTo(x + w2 * 0.55, ay); g.lineTo(...armR); g.stroke();
+    g.fillStyle = T.body1;
+    g.beginPath(); g.arc(armL[0], armL[1], s * 0.04, 0, 7); g.fill();
+    g.beginPath(); g.arc(armR[0], armR[1], s * 0.04, 0, 7); g.fill();
+  }
+
+  // neck
+  g.fillStyle = T.trim;
+  g.fillRect(x - s * 0.05, tt - s * 0.05, s * 0.1, s * 0.06);
+
+  // head
+  const hw = (type === 'pawn' ? 0.36 : 0.42) * s, hh = (type === 'pawn' ? 0.27 : 0.3) * s;
+  const hx = x - hw / 2, hy = tt - s * 0.04 - hh;
+  g.fillStyle = metal(hx, hx + hw);
+  if (type === 'rook') {
+    // castle-turret head
+    rr(hx, hy, hw, hh, s * 0.03); g.fill();
+    const n = 4, cw = hw / (2 * n - 1);
+    for (let i = 0; i < n; i++) g.fillRect(hx + i * 2 * cw, hy - s * 0.08, cw, s * 0.09);
+  } else if (type === 'knight') {
+    // horse-ish snout + ears
+    rr(hx, hy, hw, hh, s * 0.08); g.fill();
+    g.beginPath(); g.moveTo(hx + hw * 0.2, hy + 2); g.lineTo(hx + hw * 0.3, hy - s * 0.13); g.lineTo(hx + hw * 0.45, hy + 2); g.fill();
+    g.beginPath(); g.moveTo(hx + hw * 0.55, hy + 2); g.lineTo(hx + hw * 0.7, hy - s * 0.13); g.lineTo(hx + hw * 0.8, hy + 2); g.fill();
+    rr(hx - hw * 0.28, hy + hh * 0.45, hw * 0.4, hh * 0.45, s * 0.04); g.fill();
+  } else {
+    rr(hx, hy, hw, hh, s * 0.1); g.fill();
+  }
+  // visor
+  const vx = hx + hw * 0.1, vy = hy + hh * 0.28, vw = hw * 0.8, vh = hh * 0.42;
+  g.fillStyle = T.visor; rr(vx, vy, vw, vh, vh / 2); g.fill();
+  // eyes
+  g.save(); g.shadowColor = T.eye; g.shadowBlur = s * 0.15; g.fillStyle = T.eye;
+  if (opts.eyes === 'x') {
+    g.strokeStyle = T.eye; g.lineWidth = Math.max(1.2, s * 0.022);
+    [vx + vw * 0.3, vx + vw * 0.7].forEach(ex => {
+      const r = vh * 0.28, ey = vy + vh / 2;
+      g.beginPath(); g.moveTo(ex - r, ey - r); g.lineTo(ex + r, ey + r); g.moveTo(ex + r, ey - r); g.lineTo(ex - r, ey + r); g.stroke();
+    });
+  } else if (opts.eyes === 'smug') {
+    g.strokeStyle = T.eye; g.lineWidth = Math.max(1.5, s * 0.03); g.lineCap = 'round';
+    [vx + vw * 0.3, vx + vw * 0.7].forEach(ex => {
+      const ey = vy + vh * 0.55;
+      g.beginPath(); g.arc(ex, ey, vh * 0.26, Math.PI * 1.1, Math.PI * 1.9); g.stroke();
+    });
+  } else {
+    const er = Math.max(1.2, vh * 0.22);
+    g.beginPath(); g.arc(vx + vw * 0.3, vy + vh / 2, er, 0, 7); g.fill();
+    g.beginPath(); g.arc(vx + vw * 0.7, vy + vh / 2, er, 0, 7); g.fill();
+  }
+  g.restore();
+
+  // headgear
+  const top = hy;
+  if (type === 'pawn' || type === 'bishop') {
+    g.strokeStyle = T.trim; g.lineWidth = Math.max(1, s * 0.02);
+    g.beginPath(); g.moveTo(x, top); g.lineTo(x + s * 0.03, top - s * 0.14); g.stroke();
+    g.save(); g.shadowColor = T.eye; g.shadowBlur = s * 0.1; g.fillStyle = T.eye;
+    g.beginPath(); g.arc(x + s * 0.03, top - s * 0.15, s * 0.03, 0, 7); g.fill(); g.restore();
+  }
+  if (type === 'bishop') {
+    g.fillStyle = metal(x - s * 0.1, x + s * 0.1);
+    g.beginPath(); g.ellipse(x - s * 0.04, top - s * 0.02, s * 0.12, s * 0.07, 0, Math.PI, 0); g.fill();
+  }
+  if (type === 'queen' || type === 'king') {
+    const cw = hw * (type === 'king' ? 1.05 : 0.9), ch = s * (type === 'king' ? 0.2 : 0.15);
+    const cx0 = x - cw / 2, cb = top + s * 0.02;
+    const gold = g.createLinearGradient(cx0, 0, cx0 + cw, 0);
+    gold.addColorStop(0, '#8a5a12'); gold.addColorStop(0.4, '#ffd76a'); gold.addColorStop(0.6, '#fff1b0'); gold.addColorStop(1, '#9a6514');
+    g.fillStyle = gold;
+    g.beginPath(); g.moveTo(cx0, cb);
+    const pts = type === 'king' ? 5 : 7;
+    for (let i = 0; i <= pts; i++) {
+      const px = cx0 + cw * i / pts;
+      const py = (i % 2 === 0) ? cb - ch : cb - ch * 0.45;
+      g.lineTo(px, py);
+    }
+    g.lineTo(cx0 + cw, cb); g.closePath(); g.fill();
+    if (type === 'king') {
+      g.fillRect(x - s * 0.012, cb - ch - s * 0.14, s * 0.024, s * 0.14);
+      g.fillRect(x - s * 0.045, cb - ch - s * 0.1, s * 0.09, s * 0.024);
+    }
+    g.fillStyle = team === 'us' ? '#39ff88' : '#ff2d6b';
+    g.beginPath(); g.arc(x, cb - ch * 0.3, s * 0.022, 0, 7); g.fill();
+  }
+  g.restore();
+  return { x, y, s, headY: hy, headX: x };
+}
+
+// ---------- laser ----------
+function laser(a, b, col) {
+  g.save();
+  g.shadowColor = col; g.shadowBlur = 16;
+  g.strokeStyle = col; g.lineWidth = 2.2; g.setLineDash([10, 6]);
+  g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
+  g.setLineDash([]); g.lineWidth = 0.8; g.strokeStyle = '#fff';
+  g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
+  g.restore();
+}
+
+function bubble(x, y, text, col, size = 13) {
+  g.save();
+  g.font = `600 ${size}px "SF Mono", Menlo, monospace`;
+  const w = g.measureText(text).width + 18, h = size + 14;
+  const bx = x - w / 2, by = y - h - 12;
+  g.fillStyle = 'rgba(5,8,16,0.88)'; g.strokeStyle = col; g.lineWidth = 1.3;
+  g.shadowColor = col; g.shadowBlur = 10;
+  rr(bx, by, w, h, 6); g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(x - 6, by + h); g.lineTo(x, by + h + 9); g.lineTo(x + 6, by + h); g.fillStyle = 'rgba(5,8,16,0.88)'; g.fill();
+  g.shadowBlur = 0; g.fillStyle = col; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(text, x, by + h / 2 + 1);
+  g.restore();
+}
+
+// ---------- scene ----------
+sky();
+floor();
+board();
+
+// Back-to-front draw order: sort by rank (z) descending.
+const pieces = [
+  // them (dark, red eyes) — back rank mate
+  ['king',   'them', 5, 7, { eyes: 'x' }],
+  ['pawn',   'them', 4, 6], ['pawn', 'them', 5, 6], ['pawn', 'them', 6, 6],
+  ['rook',   'them', 7, 7],
+  ['bishop', 'them', 3, 4],
+  ['knight', 'them', 0, 3],
+  ['pawn',   'them', 1, 5],
+  // us (chrome, green eyes)
+  ['rook',   'us',   1, 7],
+  ['queen',  'us',   3, 3, { armUp: 'R' }],
+  ['pawn',   'us',   5, 3], ['pawn', 'us', 6, 2], ['pawn', 'us', 7, 2],
+  ['knight', 'us',   2, 2],
+  ['bishop', 'us',   4, 1],
+  ['king',   'us',   6, 0, { eyes: 'smug', armUp: 'L' }],
+];
+pieces.sort((a, b) => b[3] - a[3] || a[2] - b[2]);
+
+const placed = {};
+for (const [t, tm, fx, fz, o] of pieces) placed[`${tm}-${t}-${fx}-${fz}`] = robot(t, tm, fx, fz, o || {});
+
+// mate laser: our rook's eyes -> their king along the back rank
+const R = placed['us-rook-1-7'], K = placed['them-king-5-7'];
+laser([R.x + R.s * 0.18, R.headY + R.s * 0.13], [K.x - K.s * 0.12, K.headY + K.s * 0.14], '#39ff88');
+
+bubble(K.x + 6, K.headY - K.s * 0.32, 'ERR: no legal moves', '#ff2d6b', 12);
+const Q = placed['us-king-6-0'];
+bubble(Q.x + Q.s * 0.05, Q.headY - Q.s * 0.3, 'gg.', '#39ff88', 15);
+
+// vignette
+const vg = g.createRadialGradient(W * 0.62, H * 0.45, 200, W * 0.62, H * 0.45, 980);
+vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.6)');
+g.fillStyle = vg; g.fillRect(0, 0, W, H);
+
+// wordmark (top-left area stays clear of the avatar, which sits bottom-left)
+g.save();
+g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+g.font = '800 54px "SF Pro Display", "Helvetica Neue", Arial, sans-serif';
+g.shadowColor = '#39ff88'; g.shadowBlur = 22;
+g.fillStyle = '#eafff3';
+g.fillText('chkm8', 64, 96);
+g.shadowBlur = 0;
+g.font = '500 15px "SF Mono", Menlo, monospace';
+g.fillStyle = 'rgba(160,220,255,0.85)';
+g.fillText('autonomous agents · onchain · 24/7', 66, 124);
+g.fillStyle = 'rgba(57,255,136,0.9)';
+g.fillText('1. Rb8#  1-0', 66, 148);
+g.restore();
+
+// footer tag bottom-right
+g.font = '500 12px "SF Mono", Menlo, monospace';
+g.fillStyle = 'rgba(160,200,255,0.55)'; g.textAlign = 'right';
+g.fillText('agents don\'t sleep. NFA.', W - 24, 30);
+document.title = 'ready';
+</script>
+</body></html>

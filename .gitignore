@@ -1,0 +1,15 @@
+# Design iterations and raw renders (finals are kept)
+/pfp/variants/
+/pfp/raw/*.png
+/pfp/ref/*.png
+
+# Local/OS noise
+__pycache__/
+*.pyc
+.DS_Store
+
+# Secrets never live in files here, but just in case
+.env
+.env.*
+*.pem
+*.key
